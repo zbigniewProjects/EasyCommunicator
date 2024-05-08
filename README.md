@@ -1,6 +1,6 @@
 ### EasyCommunicator
 Utility for .NET applications that facilitates bidirectional communication between client and server, akin to HTTP but with support for both client-to-server and server-to-client interactions.
- - [Website](https://zbigniew.dev/projects/dncommunicator)
+ - [Website](https://zbigniew.dev/projects/easycommunicator)
 
 ## Getting Started
 
