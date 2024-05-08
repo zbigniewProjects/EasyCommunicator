@@ -33,10 +33,8 @@ namespace EasyComClient
         internal ConcurrentDictionary<ushort, ReceivedResponseCallback> _pendingRequests { get; set; } = new ConcurrentDictionary<ushort, ReceivedResponseCallback>();
         ushort _requestCounter;
 
-        internal void Init(EasyClientAPI api, ILogger logger, CommandSystem commandSystem, IMessageConverter messageConverter, IClientHandler handler)
+        public Client(EasyClientAPI api, ILogger logger, CommandSystem commandSystem, IMessageConverter messageConverter, IClientHandler handler)
         {
-            if (Tcp != null) return;
-
             EasyClientAPI = api;
             _messageConverter = messageConverter;
             _commandSystem = commandSystem;

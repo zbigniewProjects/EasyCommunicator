@@ -4,7 +4,6 @@ public class Program
     public async static Task Main(string[] args)
     {
         EasyClientAPI easyClient = new EasyClientAPI();
-        easyClient.Init();
         easyClient.SetLogLevel(LogSystem.LogLevel.Information);
 
         //register callbacks for common events
@@ -24,11 +23,11 @@ public class Program
             Console.WriteLine("Press key to request number number random from server");
             Console.ReadKey();
 
-            //send request to easy communicator server component
+            //send request to easy communicator server component utylized by some parent app
             Request req = await easyClient.SendRequest("GenerateRandomNumber");
 
             //code 255 stands for request timeout, handle it here
-            if (req.Code == 255) 
+            if (req.Code == 255)
             {
                 Console.WriteLine("Server did not respond on time");
                 continue;

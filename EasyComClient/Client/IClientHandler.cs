@@ -4,6 +4,5 @@
     {
         bool ReadPacket(byte[] packet);
         void RegisterMessageHandler<T>(EasyClientAPI.MessageHandler<T> handler);
-        void Init(IMessageConverter messageConverter);
     }
 }

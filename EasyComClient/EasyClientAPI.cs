@@ -32,7 +32,7 @@ namespace EasyComClient
 
         public ClientStatus Status { get; internal set; } = ClientStatus.NotConnected;
 
-        internal Client _client;
+        internal Client Client;
         internal IClientHandler _handler;
 
         public delegate void OnConnectedToServer();
@@ -45,19 +45,13 @@ namespace EasyComClient
         ushort _seatID;
 
         IMessageConverter _messageConverter;
-
         public ILogger Logger;
 
         public Configuration Configuration = new Configuration();
 
         //must be method, not constructor, since this dll is also used in unity game engine
-        public void Init()
+        public EasyClientAPI()
         {
-            /* unity may want to initialize stuff more then once, for example when users reopens editor window a lot
-            so we have to keep track of how much it was initialized */
-            if (_initialized) return;
-            
-
             Logger = new Logger();
             Logger.SetLogLevel(LogLevel.None);
 
@@ -65,15 +59,12 @@ namespace EasyComClient
 
             _messageConverter = new MessageConverter();
 
-            _handler = new ClientHandler();
-            _handler.Init(_messageConverter);
+            _handler = new ClientHandler(_messageConverter);
 
-            _client = new Client();
+            
+            CommandManager = new CommandSystem(Logger, this, _handler);
 
-            CommandManager = new CommandSystem();
-            CommandManager.Init(Logger, _client, _handler);
-
-            _client.Init(this, Logger, CommandManager, _messageConverter, _handler);
+            Client = new Client(this, Logger, CommandManager, _messageConverter, _handler);
         }
 
         public void SetLogLevel(LogLevel logLevel)
@@ -88,12 +79,12 @@ namespace EasyComClient
         public void AssignSeatID(ushort seatID) => _seatID = seatID;
 
         public async Task<bool> Connect(string address, ushort port) => 
-            await _client.ConnectToServer(_seatID, address, port);
+            await Client.ConnectToServer(_seatID, address, port);
         
 
         public void Disconnect()
         {
-            _client.Disconnect();
+            Client.Disconnect();
         }
 
         public delegate void MessageHandler<T>(T structData);
@@ -111,16 +102,16 @@ namespace EasyComClient
         public async Task<Request> SendStructuredRequest<T>(string name, T msg) where T : struct
         {
             string serializedMsg = JsonConvert.SerializeObject(msg);
-            return await _client.SendRequestToServer(name, serializedMsg);
+            return await Client.SendRequestToServer(name, serializedMsg);
         }
         public async Task<Request> SendRequest(string name, string body) =>
-            await _client.SendRequestToServer(name, body);
+            await Client.SendRequestToServer(name, body);
         public async Task<Request> SendRequest(string name) =>
-            await _client.SendRequestToServer(name, string.Empty);
+            await Client.SendRequestToServer(name, string.Empty);
 
         public void SendData<T>(T data) where T : struct
         {
-            _client.SendMessage(data);
+            Client.SendMessage(data);
         }
     }
 

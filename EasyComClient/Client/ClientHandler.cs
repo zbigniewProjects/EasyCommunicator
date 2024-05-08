@@ -11,7 +11,7 @@ namespace EasyComClient
 
         IMessageConverter _converter;
 
-        public void Init(IMessageConverter messageConverter) => _converter = messageConverter;
+        public ClientHandler (IMessageConverter messageConverter) => _converter = messageConverter;
 
         public void RegisterMessageHandler<T>(MessageHandler<T> handler)
         {

@@ -21,15 +21,14 @@ namespace EasyComClient
         ConcurrentDictionary<string, int> _postCmdHashes = new ConcurrentDictionary<string, int>();
 
         ILogger _logger;
-
         IClientHandler _clientHandler;
 
-        Client _client;
-        public void Init(ILogger logger, Client client, IClientHandler clientHandler)
+        EasyClientAPI _clientApi;
+        public CommandSystem (ILogger logger, EasyClientAPI client, IClientHandler clientHandler)
         {
             _logger = logger;
             _clientHandler = clientHandler;
-            _client = client;
+            _clientApi = client;
 
             _clientHandler.RegisterMessageHandler<CommandMsg>(ReadCommand);
             _clientHandler.RegisterMessageHandler<ResponseMsg>(Read_ResponseFromServer);
@@ -38,7 +37,7 @@ namespace EasyComClient
         void Read_ResponseFromServer(ResponseMsg data)
         {
             //check is response is still current, since it can always be received after passing of timeout
-            if (_client._pendingRequests.TryRemove(data.ReqID, out Client.ReceivedResponseCallback value))
+            if (_clientApi.Client._pendingRequests.TryRemove(data.ReqID, out Client.ReceivedResponseCallback value))
                 value.Invoke(new Request { Code = data.Code, ResponseBody = data.Payload});
         }
 
@@ -91,7 +90,7 @@ namespace EasyComClient
 
             void Respond(byte code, string body)
             {
-                _client.SendMessage(new ResponseMsg { ReqID = cmd.ReqID, Code = code, Payload = body });
+                _clientApi.Client.SendMessage(new ResponseMsg { ReqID = cmd.ReqID, Code = code, Payload = body });
             }
         }
     }

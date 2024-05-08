@@ -1,4 +1,4 @@
-﻿using EasyComServer; 
+﻿using EasyComServer;
 public class Program
 {
     static EasyServerAPI _easyServer;
@@ -6,7 +6,7 @@ public class Program
     {
         //First create EasyCommunicator server instance
         _easyServer = new EasyServerAPI();
-       
+
         //we can register callbacks for common events such as clients connecting and disconnecting
         _easyServer.Callback_OnClientConnected += (IClient client) => Console.WriteLine($"Client #{client.ID()} connected.");
         _easyServer.Callback_OnClientDisconnected += (short clientID) => Console.WriteLine($"Client #{clientID} disconnected.");

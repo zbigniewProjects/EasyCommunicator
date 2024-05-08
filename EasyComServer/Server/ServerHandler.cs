@@ -9,7 +9,7 @@ namespace EasyComServer
     /// </summary>
     internal class ServerHandler : IServerHandler
     {
-        static Dictionary<ushort, Delegate> _packetHandlers = new Dictionary<ushort, Delegate>();
+        Dictionary<ushort, Delegate> _packetHandlers = new Dictionary<ushort, Delegate>();
         ILogger _logger;
         IMessageConverter _messageConverter;
         public ServerHandler(ILogger logger, IMessageConverter structMessageManager)
