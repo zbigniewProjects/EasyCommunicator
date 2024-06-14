@@ -1,36 +1,36 @@
 ﻿using EasyComServer;
+using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 public class Program
 {
-    static EasyServerAPI _easyServer;
-    public static void Main(string[] args)
+    static void Main(string[] args)
     {
-        //First create EasyCommunicator server instance
-        _easyServer = new EasyServerAPI();
+        EasyServerAPI server = new EasyServerAPI(new Logger<Program>(new LoggerFactory()));
+        server.Configuration.ThrowException_WhenSendingDataWhileNotConnected = false;
+        server.Configuration.ThrowException_WhenSendingRequestWhileNotConnected = false;
+        server.StartServer(7777, 20);
+        server.SetUseSeatSystem(false);
 
-        //we can register callbacks for common events such as clients connecting and disconnecting
-        _easyServer.Callback_OnClientConnected += (IClient client) => Console.WriteLine($"Client #{client.ID()} connected.");
-        _easyServer.Callback_OnClientDisconnected += (short clientID) => Console.WriteLine($"Client #{clientID} disconnected.");
+        Console.WriteLine($"Easy server started on port {7777}");
 
-        //register endpoint on which client will issue requests
-        _easyServer.RegisterEndpoint("GenerateRandomNumber", (short clientID, string requestBody, Response response) => {
-            Console.WriteLine($"Client number {clientID} requested random number!");
-
-            //generate random number
-            Random random = new Random();
-            int randomNumber = random.Next(0, 1000);
-
-            //respond to client with random number as requested. first value is response code (0), and second is body (random number)
-            response.Respond(0, randomNumber.ToString());
-            Console.WriteLine($"Random number {randomNumber} sent to client #{clientID}.");
+        server.RegisterEndpoint("testreq", (short clientID, string requestBody, Response response) => {
+            Console.WriteLine($"Received req from client #{clientID}: {requestBody}");
+            response.Respond(0, "tak");
         });
 
-        //after registering endpoints we can start the server
-        ushort port = 7777;
-        ushort maxConcurrentClients = 100;
-        Console.WriteLine($"Started server on port {port}");
-        _easyServer.StartServer(port, maxConcurrentClients);
+        Random random = new Random();
 
-        //prevent app from immediate closure
+        server.Callback_OnClientConnected += (IClient client) => {
+            Console.WriteLine($"Client {client.ID()} connected");
+            for (int i = 0; i < 10; i++)
+            {
+                client.SendRequest("req", random.Next(0, 1000).ToString());
+            }
+        };
+
+        server.Callback_OnClientDisconnected += (short clientID, DisconnectCause disconnectCause) => { Console.WriteLine($"Client {clientID} disconnect because: {disconnectCause}"); };
+
+        Thread.Sleep(1000000000);
         Console.ReadKey();
     }
 }

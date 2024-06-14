@@ -12,14 +12,27 @@ namespace EasyComServer
 
         void SendMessage<T>(T msg) where T : struct;
 
-        void Disconnect();
+        void Disconnect(DisconnectCause cause);
         Task<Request> SendRequest(string name, string data);
         Task<Request> SendStructuredRequest<T>(string name, T msg) where T : struct;
 
         void EvaluateResponse(ResponseMsg res);
 
         public void HandleStream();
+
+
     }
+
+    public enum DisconnectCause 
+    {
+        Disconnected, //server ordered disconnection
+        ClientDisconnected, //client disconnected by itself
+        ClientSentInvalidHandshake,
+        ClientSentInvalidMessage,
+        ClientWasNotExpected,
+        ClientWithSameTickedIsAlreadyConnected,
+    }
+
     public enum ConnectionStatus
     {
         NotConnected,

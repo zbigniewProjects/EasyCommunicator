@@ -1,6 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Net.Sockets;
-using LogSystem;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace EasyComServer
@@ -30,13 +30,12 @@ namespace EasyComServer
 
         IMessageConverter _messageConverter;
 
-        private object _reqCounterLock = new object();
+        private object _reqCounterLock = new ();
 
-        public Client(EasyServerAPI dNCommunicatorAPI, IServerHandler handler, short id, IMessageConverter messageConverter)
+        public Client(EasyServerAPI dNCommunicatorAPI, IServerHandler handler, IMessageConverter messageConverter)
         {
             _tcp = new TCP(dNCommunicatorAPI.Logger, dNCommunicatorAPI, this, handler);
             _easyServerApi = dNCommunicatorAPI;
-            _id = id;
             _messageConverter = messageConverter;
         }
 
@@ -52,10 +51,12 @@ namespace EasyComServer
             }
         }
 
-        public void Disconnect()
+        DisconnectCause _disconnectCause;
+        public void Disconnect(DisconnectCause disconnectCause)
         {
             if (ClientStatus == ConnectionStatus.Connected)
             {
+                _disconnectCause = disconnectCause;
                 ClientStatus = ConnectionStatus.Disconnecting;
             }
             else
@@ -72,10 +73,10 @@ namespace EasyComServer
                     item.Invoke(new Request { Code = 254 });
                 }
 
-                _easyServerApi.Logger.LogInfo($"Disconnecting client {ID()} due to server closure.");
+                _easyServerApi.Logger.LogInformation($"Disconnecting client {ID()} due to server closure.");
 
                 _tcp.Disconnect();
-                _server.OnDisconnectClient(_id);
+                _server.OnDisconnectClient(_id, _disconnectCause);
                 ClientStatus = ConnectionStatus.NotConnected;
                 return;
             }
@@ -224,7 +225,7 @@ namespace EasyComServer
                 {
                     try
                     {
-                        byteLength = _stream.Read(_receiveBuffer, 0, 2);
+                        byteLength = _stream.Read(data, 0, 2);
                     }
                     catch
                     {
@@ -236,7 +237,7 @@ namespace EasyComServer
 
                 if (byteLength < 2) 
                 {
-                    _client.Disconnect();
+                    _client.Disconnect(DisconnectCause.ClientSentInvalidHandshake);
                     return;
                 }
 
@@ -248,21 +249,27 @@ namespace EasyComServer
                     _logger.LogWarning($"Client with seat id {appID} is already connected, disconnecting redundant");
 
                     _dnCommunicatorAPI.Callback_OnDoubleConnectionDetected?.Invoke(appID);
-                    _client.Disconnect();
-                    return;
-                }
-
-                if (server.UseSeatSystem && !server.WaitingSeats.Contains(appID))
-                {
-                    _logger.LogWarning($"Client with seat id {appID} is not expected to connect, disconnecting");
-
-                    _dnCommunicatorAPI.Callback_OnUnexpectedClientTriedToConnect?.Invoke(appID);
-                    _client.Disconnect();
+                    _client.Disconnect(DisconnectCause.ClientWithSameTickedIsAlreadyConnected);
                     return;
                 }
 
                 if (server.UseSeatSystem)
+                {
+                    if (!server.WaitingSeats.Contains(appID))
+                    {
+                        _logger.LogWarning($"Client with seat id {appID} is not expected to connect, disconnecting");
+
+                        _dnCommunicatorAPI.Callback_OnUnexpectedClientTriedToConnect?.Invoke(appID);
+                        _client.Disconnect(DisconnectCause.ClientWasNotExpected);
+                        return;
+                    }
+
                     server.RemoveClientSeat(appID);
+                    _client.SetID(appID);
+                }
+                else
+                    _client.SetID(server.GetAndDequeueFreeClientID());
+                    
 
                 _dnCommunicatorAPI.Callback_OnClientConnected?.Invoke(_client);
 
@@ -291,20 +298,20 @@ namespace EasyComServer
                         else if (socketEx.SocketErrorCode == SocketError.ConnectionReset)
                         {
                             // Handle remote host closure
-                            _client.Disconnect();
+                            _client.Disconnect(DisconnectCause.ClientDisconnected);
                             return;
                         }
                         else
                         {
                             // Handle other socket errors
-                            _client.Disconnect();
+                            _client.Disconnect(DisconnectCause.ClientDisconnected);
                             return;
                         }
                     }
 
                     if (streamLength <= 0)
                     {
-                        _client.Disconnect();
+                        _client.Disconnect(DisconnectCause.ClientDisconnected);
                         return;
                     }
 
@@ -325,7 +332,7 @@ namespace EasyComServer
 
                             if (_handler.ReadPacket(_client.ID(), packet) == false)
                             {
-                                _client.Disconnect();
+                                _client.Disconnect(DisconnectCause.ClientSentInvalidMessage);
                                 return;
                             }
 
@@ -355,7 +362,7 @@ namespace EasyComServer
                     }
                     catch
                     {
-                        _client.Disconnect();
+                        _client.Disconnect(DisconnectCause.ClientDisconnected);
                         return;
                     }
                 }

@@ -1,7 +1,7 @@
 ﻿using System.Net.Sockets;
 using System.Net;
 using System.Collections.Concurrent;
-using LogSystem;
+using Microsoft.Extensions.Logging;
 
 namespace EasyComServer
 {
@@ -30,6 +30,7 @@ namespace EasyComServer
         CancellationTokenSource _serverCancellationToken;
 
         ServerState _currentServerState;
+        private Task _handleClientsTask;
 
         enum ServerState 
         {
@@ -90,7 +91,7 @@ namespace EasyComServer
             Port = port;
 
             IPAddress iPAddress = IPAddress.Any;
-            TcpListener tcpListener = new TcpListener(iPAddress, port);
+            TcpListener tcpListener = new TcpListener(new IPAddress(new byte[4]{ 0,0,0,0}), port);
             try
             {
                 tcpListener.Start();
@@ -103,9 +104,9 @@ namespace EasyComServer
             }
             
             _currentServerState = ServerState.Listening;
-            Task task = HandleClients();
+            _handleClientsTask = Task.Run(HandleClients);
 
-            _dnComInterface.Logger.LogInfo($"Server started on {iPAddress}:{port}");
+            _dnComInterface.Logger.LogInformation($"Server started on {iPAddress}:{port}");
             _tcpListener = tcpListener;
 
             _serverCancellationToken = new CancellationTokenSource();
@@ -122,8 +123,7 @@ namespace EasyComServer
                         newClient.Dispose();
                         continue;
                     }
-                    _freeClientIDs.TryDequeue(out short id);
-                    IClient client = new Client(_dnComInterface, Handler, id, _messageConverter);
+                    IClient client = new Client(_dnComInterface, Handler, _messageConverter);
                     client.Connect(newClient, this);
                 }
                 catch (OperationCanceledException) 
@@ -131,8 +131,8 @@ namespace EasyComServer
                     IClient[] clients = Clients.Values.ToArray();
                     for (int i = 0; i < clients.Length; i++)
                     {
-                        _logger.LogInfo($"Cancelling client {clients[i].ID()} due to server closure");
-                        clients[i].Disconnect();
+                        _logger.LogInformation($"Cancelling client {clients[i].ID()} due to server closure");
+                        clients[i].Disconnect(DisconnectCause.Disconnected);
                         foreach (IClient client in Clients.Values)
                         {
                             client.HandleStream();
@@ -151,7 +151,7 @@ namespace EasyComServer
 
                     _maxConcurrentConnections = 0;
 
-                    _logger.LogInfo($"Server from port {Port} stopped");
+                    _logger.LogInformation($"Server from port {Port} stopped");
                 }
             }
 
@@ -186,18 +186,33 @@ namespace EasyComServer
         public void DisconnectClient(short id) 
         {
             if(Clients.TryGetValue(id, out IClient client))
-                client.Disconnect();
+                client.Disconnect(DisconnectCause.Disconnected);
         }
 
-        public void OnDisconnectClient(short clientID) 
+        public void OnDisconnectClient(short clientID, DisconnectCause disconnectCause) 
         {
-            _dnComInterface.Callback_OnClientDisconnected?.Invoke(clientID);
+            _dnComInterface.Callback_OnClientDisconnected?.Invoke(clientID, disconnectCause);
             Clients.TryRemove(clientID, out IClient client);
             _freeClientIDs.Enqueue(clientID);
         }
 
-        public void RegisterClientSeat(short seat) => WaitingSeats.Add(seat);
+        public short RegisterClientSeat()
+        {
+            if (_freeClientIDs.TryDequeue(out short id))
+            {
+                WaitingSeats.Add(id);
+                return id;
+            }
+            else return -1;
+        }
         public void RemoveClientSeat(short seat) => WaitingSeats.Remove(seat);
-        
+        public bool DoesSeatExist(short appID) => WaitingSeats.Contains(appID);
+
+        internal short GetAndDequeueFreeClientID()
+        {
+            if (_freeClientIDs.TryDequeue(out short id))
+                return id;
+            else return -1;
+        }
     }
 }

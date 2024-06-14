@@ -1,6 +1,6 @@
 ﻿using EasyComServer;
 using DNUploader.Extensions;
-using LogSystem;
+using Microsoft.Extensions.Logging;
 
 namespace EasyComServer
 {
@@ -10,7 +10,7 @@ namespace EasyComServer
     internal class ServerHandler : IServerHandler
     {
         Dictionary<ushort, Delegate> _packetHandlers = new Dictionary<ushort, Delegate>();
-        ILogger _logger;
+        readonly ILogger _logger;
         IMessageConverter _messageConverter;
         public ServerHandler(ILogger logger, IMessageConverter structMessageManager)
         {

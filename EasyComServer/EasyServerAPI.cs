@@ -1,4 +1,4 @@
-﻿using LogSystem;
+﻿using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 
 namespace EasyComServer
@@ -36,9 +36,10 @@ namespace EasyComServer
         public delegate void ClientConnectionEvent(short clientID);
         public delegate void ClientConnectedEvent(IClient client);
         public delegate void RequestToClientTimeout(short clientID, string reqName);
+        public delegate void ClientDisconnectedEvent(short clientID, DisconnectCause disconnectCause);
 
         public ClientConnectedEvent Callback_OnClientConnected { get; set; }
-        public ClientConnectionEvent Callback_OnClientDisconnected { get; set; }
+        public ClientDisconnectedEvent Callback_OnClientDisconnected { get; set; }
         public ClientConnectionEvent Callback_OnUnexpectedClientTriedToConnect { get; set; }
         public ClientConnectionEvent Callback_OnDoubleConnectionDetected { get; set; }
         public RequestToClientTimeout Callback_OnRequestToClientTimeout { get; set; }
@@ -59,21 +60,23 @@ namespace EasyComServer
 
         public Configuration Configuration = new Configuration();
 
-        public EasyServerAPI()
+        public EasyServerAPI(ILogger logger = null)
         {
-            Logger = new Logger();
+            Logger = (logger == null) ? new Logger<EasyServerAPI>(new LoggerFactory()) : logger;
             _messageConverter = new MessageConverter();
             _handler = new ServerHandler(Logger, _messageConverter);
             _commandSystem = new CommandSystem(this, _handler);
             _server = new Server(this, Logger);
         }
 
-        public void SetLogLevel(LogLevel logLevel) => Logger.SetLogLevel(logLevel);
-        public void RegisterLogHandler(Action<string> logHandler) => Logger.RegisterWriter(logHandler);
+        [Obsolete]
+        public void RegisterLogHandler(Action<string> logHandler) => throw new NotSupportedException();
 
         public void StartServer(ushort port, ushort maxConcurrentConnections)
         {
-            _server.Start(port, maxConcurrentConnections, _handler, _commandSystem, _messageConverter);
+            Task.Run(()=>
+                _server.Start(port, maxConcurrentConnections, _handler, _commandSystem, _messageConverter)
+            );
         }
         public void StopServer()
         {
@@ -91,10 +94,8 @@ namespace EasyComServer
         {
             _server.UseSeatSystem = use;
         }
-        public void RegisterSeatForConnection(short appID)
-        {
-            _server.RegisterClientSeat(appID);
-        }
+        public short RegisterSeatForConnection() => _server.RegisterClientSeat();
+        
         public void RemoveSeatForConnection(short appID)
         {
             _server.RemoveClientSeat(appID);

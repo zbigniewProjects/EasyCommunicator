@@ -1,7 +1,7 @@
-﻿using LogSystem;
-using Newtonsoft.Json;
+﻿//using Newtonsoft.Json;
 using System;
 using System.Threading.Tasks;
+using static EasyComClient.Client;
 
 namespace EasyComClient
 {
@@ -16,6 +16,7 @@ namespace EasyComClient
         ClientResponseBase _responseCallback;
         internal Response(ClientResponseBase clientResponseCallback) => _responseCallback = clientResponseCallback;
         public void Respond(byte code, string payload) => _responseCallback.Invoke(code, payload);
+        public void Respond(byte code) => _responseCallback.Invoke(code, string.Empty);
     }
 
     public delegate void CommandBaseClient(string argsm, Response res);
@@ -28,55 +29,38 @@ namespace EasyComClient
 
     public class EasyClientAPI
     {
-        bool _initialized = false;
-
         public ClientStatus Status { get; internal set; } = ClientStatus.NotConnected;
 
         internal Client Client;
         internal IClientHandler _handler;
 
         public delegate void OnConnectedToServer();
+        public delegate void OnDisconnectedFromServer(DisconnectCause disconnectCause);
         public OnConnectedToServer Callback_OnConnected;
-        public OnConnectedToServer Callback_OnDisconnected;
+        public OnDisconnectedFromServer Callback_OnDisconnected;
         public OnConnectedToServer Callback_CouldNotConnect;
 
         internal CommandSystem CommandManager { private set; get; }
 
-        ushort _seatID;
+        short _seatID;
 
         IMessageConverter _messageConverter;
-        public ILogger Logger;
+       // public ILogger Logger;
 
         public Configuration Configuration = new Configuration();
 
         //must be method, not constructor, since this dll is also used in unity game engine
         public EasyClientAPI()
         {
-            Logger = new Logger();
-            Logger.SetLogLevel(LogLevel.None);
-
-            _initialized = true;
+            //Logger = logger;
 
             _messageConverter = new MessageConverter();
-
             _handler = new ClientHandler(_messageConverter);
-
-            
-            CommandManager = new CommandSystem(Logger, this, _handler);
-
-            Client = new Client(this, Logger, CommandManager, _messageConverter, _handler);
+            CommandManager = new CommandSystem(this, _handler);
+            Client = new Client(this, CommandManager, _messageConverter, _handler);
         }
 
-        public void SetLogLevel(LogLevel logLevel)
-        {
-            if (Logger == null)
-                throw new Exception("Initialize EasyClientAPI with .Init() method before setting log level");
-
-            Logger.SetLogLevel(logLevel);
-        }
-        public void RegisterLogHandler(Action<string> logHandler) => Logger.RegisterWriter(logHandler);
-
-        public void AssignSeatID(ushort seatID) => _seatID = seatID;
+        public void AssignSeatID(short seatID) => _seatID = seatID;
 
         public async Task<bool> Connect(string address, ushort port) => 
             await Client.ConnectToServer(_seatID, address, port);
@@ -84,7 +68,7 @@ namespace EasyComClient
 
         public void Disconnect()
         {
-            Client.Disconnect();
+            Client.Disconnect(DisconnectCause.Disconnected);
         }
 
         public delegate void MessageHandler<T>(T structData);
@@ -99,11 +83,11 @@ namespace EasyComClient
             CommandManager.RegisterCommand(name, method);
         }
 
-        public async Task<Request> SendStructuredRequest<T>(string name, T msg) where T : struct
+        /*public async Task<Request> SendStructuredRequest<T>(string name, T msg) where T : struct
         {
             string serializedMsg = JsonConvert.SerializeObject(msg);
             return await Client.SendRequestToServer(name, serializedMsg);
-        }
+        }*/
         public async Task<Request> SendRequest(string name, string body) =>
             await Client.SendRequestToServer(name, body);
         public async Task<Request> SendRequest(string name) =>

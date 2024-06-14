@@ -1,13 +1,6 @@
 ﻿using DNUploader.Extensions;
-using LogSystem;
-using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics.Eventing.Reader;
-using System.Linq;
-using System.Runtime.Remoting.Messaging;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace EasyComClient
 {
@@ -20,13 +13,12 @@ namespace EasyComClient
         //commands that we will ask client to run (we only need their hashes)
         ConcurrentDictionary<string, int> _postCmdHashes = new ConcurrentDictionary<string, int>();
 
-        ILogger _logger;
+        
         IClientHandler _clientHandler;
 
         EasyClientAPI _clientApi;
-        public CommandSystem (ILogger logger, EasyClientAPI client, IClientHandler clientHandler)
-        {
-            _logger = logger;
+        public CommandSystem (EasyClientAPI client, IClientHandler clientHandler)
+        {            
             _clientHandler = clientHandler;
             _clientApi = client;
 
@@ -70,7 +62,7 @@ namespace EasyComClient
                     }
                 }
 
-                _logger.LogWarning($"Command \"{name}\" produces the same hash as \"{previousCmdName}\", please rename one of them");
+                //_logger.LogWarning($"Command \"{name}\" produces the same hash as \"{previousCmdName}\", please rename one of them");
                 return;
             }
 
@@ -85,8 +77,8 @@ namespace EasyComClient
             {
                 method.Invoke(cmd.Payload, new Response(Respond));
             }
-            else
-                _logger.LogWarning($"Received request from server that is not recognized {cmd.CmdHash}");
+           // else
+                //_logger.LogWarning($"Received request from server that is not recognized {cmd.CmdHash}");
 
             void Respond(byte code, string body)
             {
