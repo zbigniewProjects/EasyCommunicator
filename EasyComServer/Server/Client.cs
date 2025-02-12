@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using System.Net.Sockets;
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace EasyComServer
@@ -10,10 +9,9 @@ namespace EasyComServer
     /// </summary>
     internal class Client : IClient
     {
-        public ConnectionStatus ClientStatus { get; set; } = ConnectionStatus.NotConnected;
-
         Server _server;
 
+        public ConnectionStatus ClientStatus { get; set; } = ConnectionStatus.NotConnected;
         public short ID() => _id;
 
         public static int DataBufferSize = 1024 * 1024;
@@ -27,14 +25,13 @@ namespace EasyComServer
         private ushort _requestCounter;
 
         EasyServerAPI _easyServerApi;
-
         IMessageConverter _messageConverter;
-
         private object _reqCounterLock = new ();
+        DisconnectCause _disconnectCause;
 
         public Client(EasyServerAPI dNCommunicatorAPI, IServerHandler handler, IMessageConverter messageConverter)
         {
-            _tcp = new TCP(dNCommunicatorAPI.Logger, dNCommunicatorAPI, this, handler);
+            _tcp = new TCP(dNCommunicatorAPI, this, handler);
             _easyServerApi = dNCommunicatorAPI;
             _messageConverter = messageConverter;
         }
@@ -50,17 +47,13 @@ namespace EasyComServer
                 _tcp.Connect(_socket, _server);
             }
         }
-
-        DisconnectCause _disconnectCause;
         public void Disconnect(DisconnectCause disconnectCause)
         {
-            if (ClientStatus == ConnectionStatus.Connected)
-            {
-                _disconnectCause = disconnectCause;
-                ClientStatus = ConnectionStatus.Disconnecting;
-            }
-            else
-                _easyServerApi.Logger.LogWarning("Already disconnected");
+            if (ClientStatus != ConnectionStatus.Connected)
+                return;
+
+            _disconnectCause = disconnectCause;
+            ClientStatus = ConnectionStatus.Disconnecting;
         }
 
         public void HandleStream()
@@ -73,14 +66,11 @@ namespace EasyComServer
                     item.Invoke(new Request { Code = 254 });
                 }
 
-                _easyServerApi.Logger.LogInformation($"Disconnecting client {ID()} due to server closure.");
-
                 _tcp.Disconnect();
                 _server.OnDisconnectClient(_id, _disconnectCause);
                 ClientStatus = ConnectionStatus.NotConnected;
                 return;
             }
-
 
             if (ClientStatus == ConnectionStatus.Connected)
             {
@@ -102,6 +92,8 @@ namespace EasyComServer
             _tcp.SendData(_messageConverter.SerializeWithMsgID(msg));
         }
         #region request system
+
+        //TODO: redo
         public async Task<Request> SendRequest(string name, string data)
         {
             if (_easyServerApi.Configuration.ThrowException_WhenSendingRequestWhileNotConnected &&
@@ -184,10 +176,7 @@ namespace EasyComServer
             TcpClient _socket;
             NetworkStream _stream;
             IServerHandler _handler;
-
             byte[] _receiveBuffer;
-
-            ILogger _logger;
 
             EasyServerAPI _dnCommunicatorAPI;
 
@@ -196,11 +185,10 @@ namespace EasyComServer
             int _currentMessageLength = 0;
             int _bufferedDataLength = 0;
 
-            public TCP(ILogger logger, EasyServerAPI dNCommunicatorAPI, IClient client, IServerHandler handler)
+            public TCP(EasyServerAPI dNCommunicatorAPI, IClient client, IServerHandler handler)
             {
                 _client = client;
                 _handler = handler;
-                _logger = logger;
                 _dnCommunicatorAPI = dNCommunicatorAPI;
 
                 _receiveBuffer = new byte[DataBufferSize * 2];
@@ -246,7 +234,7 @@ namespace EasyComServer
 
                 if (server.UseSeatSystem && server.Clients.TryGetValue(appID, out IClient c))
                 {
-                    _logger.LogWarning($"Client with seat id {appID} is already connected, disconnecting redundant");
+                  //  _logger.LogWarning($"Client with seat id {appID} is already connected, disconnecting redundant");
 
                     _dnCommunicatorAPI.Callback_OnDoubleConnectionDetected?.Invoke(appID);
                     _client.Disconnect(DisconnectCause.ClientWithSameTickedIsAlreadyConnected);
@@ -255,10 +243,8 @@ namespace EasyComServer
 
                 if (server.UseSeatSystem)
                 {
-                    if (!server.WaitingSeats.Contains(appID))
+                    if (!server.DoesSeatExist(appID))
                     {
-                        _logger.LogWarning($"Client with seat id {appID} is not expected to connect, disconnecting");
-
                         _dnCommunicatorAPI.Callback_OnUnexpectedClientTriedToConnect?.Invoke(appID);
                         _client.Disconnect(DisconnectCause.ClientWasNotExpected);
                         return;
@@ -309,7 +295,7 @@ namespace EasyComServer
                         }
                     }
 
-                    if (streamLength <= 0)
+                    if (streamLength < 0)
                     {
                         _client.Disconnect(DisconnectCause.ClientDisconnected);
                         return;

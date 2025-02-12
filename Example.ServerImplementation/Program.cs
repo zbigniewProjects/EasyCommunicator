@@ -1,17 +1,25 @@
 ﻿using EasyComServer;
-using Microsoft.Extensions.Logging;
-using System.Runtime.CompilerServices;
 public class Program
 {
     static void Main(string[] args)
     {
-        EasyServerAPI server = new EasyServerAPI(new Logger<Program>(new LoggerFactory()));
+        ushort port;
+        try
+        {
+            port = Convert.ToUInt16(args[0]);
+        }
+        catch
+        {
+            port = 7777;
+        }
+
+        EasyServerAPI server = new EasyServerAPI();
         server.Configuration.ThrowException_WhenSendingDataWhileNotConnected = false;
         server.Configuration.ThrowException_WhenSendingRequestWhileNotConnected = false;
-        server.StartServer(7777, 20);
+        server.StartServer(port, 20);
         server.SetUseSeatSystem(false);
 
-        Console.WriteLine($"Easy server started on port {7777}");
+        Console.WriteLine($"Easy server started on port {port}");
 
         server.RegisterEndpoint("testreq", (short clientID, string requestBody, Response response) => {
             Console.WriteLine($"Received req from client #{clientID}: {requestBody}");
@@ -20,11 +28,12 @@ public class Program
 
         Random random = new Random();
 
-        server.Callback_OnClientConnected += (IClient client) => {
+        server.Callback_OnClientConnected += async (IClient client) => {
             Console.WriteLine($"Client {client.ID()} connected");
             for (int i = 0; i < 10; i++)
             {
-                client.SendRequest("req", random.Next(0, 1000).ToString());
+                Request res = await client.SendRequest("req", random.Next(0, 1000).ToString());
+                Console.WriteLine(res.Payload);
             }
         };
 

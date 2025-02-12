@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+﻿//using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 
 namespace EasyComServer
@@ -54,19 +54,16 @@ namespace EasyComServer
         //api access to all connected clients, must be concurrent dictionary since this will be modified by multiple threads
         public ConcurrentDictionary<short, IClient> Clients => _server.Clients;
 
-        public ILogger Logger { private set; get; }
-
         IMessageConverter _messageConverter;
 
         public Configuration Configuration = new Configuration();
 
-        public EasyServerAPI(ILogger logger = null)
+        public EasyServerAPI()
         {
-            Logger = (logger == null) ? new Logger<EasyServerAPI>(new LoggerFactory()) : logger;
             _messageConverter = new MessageConverter();
-            _handler = new ServerHandler(Logger, _messageConverter);
+            _handler = new ServerHandler(_messageConverter);
             _commandSystem = new CommandSystem(this, _handler);
-            _server = new Server(this, Logger);
+            _server = new Server(this);
         }
 
         [Obsolete]

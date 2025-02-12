@@ -1,13 +1,13 @@
 ﻿using System.Net.Sockets;
 using System.Net;
 using System.Collections.Concurrent;
-using Microsoft.Extensions.Logging;
+//using Microsoft.Extensions.Logging;
 
 namespace EasyComServer
 {
     class Server
     {
-        ILogger _logger;
+        //ILogger _logger;
 
         EasyServerAPI _dnComInterface;
 
@@ -20,7 +20,7 @@ namespace EasyComServer
 
         private TcpListener _tcpListener;
 
-        internal List<short> WaitingSeats = new List<short>();
+        internal ConcurrentBag<short> WaitingSeats = new ConcurrentBag<short>();
 
         public ConcurrentQueue<short> _freeClientIDs;
         ushort _maxConcurrentConnections;
@@ -40,10 +40,10 @@ namespace EasyComServer
             Listening,
         }
 
-        public Server(EasyServerAPI dNCommunicatorAPI, ILogger logger)
+        public Server(EasyServerAPI dNCommunicatorAPI/*, ILogger logger*/)
         {
             _dnComInterface = dNCommunicatorAPI;
-            _logger = logger;
+            //_logger = logger;
         }
 
         public async void Start(ushort port, ushort maxConnections, IServerHandler handler, CommandSystem cmdManager, IMessageConverter messageConverter)
@@ -51,7 +51,7 @@ namespace EasyComServer
             ushort maxLimit = 32000;
             if (maxConnections > maxLimit) 
             {
-                _dnComInterface.Logger.LogWarning($"Cannot set more concurrent connections to more than {maxLimit}, using {maxLimit} instead.");
+                //_dnComInterface.Logger.LogWarning($"Cannot set more concurrent connections to more than {maxLimit}, using {maxLimit} instead.");
                 maxConnections = maxLimit;
             }
 
@@ -68,19 +68,19 @@ namespace EasyComServer
 
             if (_currentServerState == ServerState.Starting) 
             {
-                _dnComInterface.Logger.LogWarning($"Server on port {port} is already starting...");
+                //_dnComInterface.Logger.LogWarning($"Server on port {port} is already starting...");
                 return;
             }
 
             if (_currentServerState == ServerState.Closing) 
             {
-                _dnComInterface.Logger.LogWarning($"Server on port {port} is closing, cant start it now");
+                //_dnComInterface.Logger.LogWarning($"Server on port {port} is closing, cant start it now");
                 return;
             }
 
             if (_currentServerState == ServerState.Listening) 
             {
-                _dnComInterface.Logger.LogWarning($"Server on port {port} is already running. Do not start same server instance twice.");
+                //_dnComInterface.Logger.LogWarning($"Server on port {port} is already running. Do not start same server instance twice.");
                 return;
             }
             _currentServerState = ServerState.Starting;
@@ -91,14 +91,14 @@ namespace EasyComServer
             Port = port;
 
             IPAddress iPAddress = IPAddress.Any;
-            TcpListener tcpListener = new TcpListener(new IPAddress(new byte[4]{ 0,0,0,0}), port);
+            TcpListener tcpListener = new TcpListener(iPAddress, port);
             try
             {
                 tcpListener.Start();
             }
             catch 
             {
-                _dnComInterface.Logger.LogWarning($"Port {port} is already in use, could not start server");
+                //_dnComInterface.Logger.LogWarning($"Port {port} is already in use, could not start server");
                 _currentServerState = ServerState.Off;
                 return;
             }
@@ -106,7 +106,7 @@ namespace EasyComServer
             _currentServerState = ServerState.Listening;
             _handleClientsTask = Task.Run(HandleClients);
 
-            _dnComInterface.Logger.LogInformation($"Server started on {iPAddress}:{port}");
+            //_dnComInterface.Logger.LogInformation($"Server started on {iPAddress}:{port}");
             _tcpListener = tcpListener;
 
             _serverCancellationToken = new CancellationTokenSource();
@@ -115,10 +115,11 @@ namespace EasyComServer
             {
                 try
                 {
+                    //Console.Wri
                     TcpClient newClient = await _tcpListener.AcceptTcpClientAsync(_serverCancellationToken.Token);
                     if (_freeClientIDs.Count == 0)
                     {
-                        _logger.LogWarning($"New client client tried to connect but maximum amount of concurrent connections ({_maxConcurrentConnections}) is reached, disconnecting");
+                       // _logger.LogWarning($"New client client tried to connect but maximum amount of concurrent connections ({_maxConcurrentConnections}) is reached, disconnecting");
                         newClient.Close();
                         newClient.Dispose();
                         continue;
@@ -131,7 +132,7 @@ namespace EasyComServer
                     IClient[] clients = Clients.Values.ToArray();
                     for (int i = 0; i < clients.Length; i++)
                     {
-                        _logger.LogInformation($"Cancelling client {clients[i].ID()} due to server closure");
+                      //  _logger.LogInformation($"Cancelling client {clients[i].ID()} due to server closure");
                         clients[i].Disconnect(DisconnectCause.Disconnected);
                         foreach (IClient client in Clients.Values)
                         {
@@ -151,27 +152,27 @@ namespace EasyComServer
 
                     _maxConcurrentConnections = 0;
 
-                    _logger.LogInformation($"Server from port {Port} stopped");
+                 //   _logger.LogInformation($"Server from port {Port} stopped");
                 }
             }
+        }
 
-            async Task HandleClients() 
+        async Task HandleClients()
+        {
+            while (true)
             {
-                while (true)
+                if (_currentServerState == ServerState.Closing)
                 {
-                    if (_currentServerState == ServerState.Closing) 
-                    {
-                        _serverCancellationToken.Cancel();
-                        return;
-                    }
-
-                    foreach (IClient client in Clients.Values)
-                    {
-                        client.HandleStream();
-                    }
-
-                    await Task.Delay(50);
+                    _serverCancellationToken.Cancel();
+                    return;
                 }
+
+                foreach (IClient client in Clients.Values)
+                {
+                    client.HandleStream();
+                }
+
+                await Task.Delay(50);
             }
         }
 
@@ -205,7 +206,7 @@ namespace EasyComServer
             }
             else return -1;
         }
-        public void RemoveClientSeat(short seat) => WaitingSeats.Remove(seat);
+        public bool RemoveClientSeat(short seat) => WaitingSeats.TryTake(out short seatt);
         public bool DoesSeatExist(short appID) => WaitingSeats.Contains(appID);
 
         internal short GetAndDequeueFreeClientID()

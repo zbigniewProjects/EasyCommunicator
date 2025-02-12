@@ -1,8 +1,4 @@
-﻿using EasyComServer;
-using DNUploader.Extensions;
-using Microsoft.Extensions.Logging;
-
-namespace EasyComServer
+﻿namespace EasyComServer
 {
     /// <summary>
     /// class that distributes incoming data from client
@@ -10,11 +6,9 @@ namespace EasyComServer
     internal class ServerHandler : IServerHandler
     {
         Dictionary<ushort, Delegate> _packetHandlers = new Dictionary<ushort, Delegate>();
-        readonly ILogger _logger;
         IMessageConverter _messageConverter;
-        public ServerHandler(ILogger logger, IMessageConverter structMessageManager)
+        public ServerHandler(IMessageConverter structMessageManager)
         {
-            _logger = logger;
             _messageConverter = structMessageManager;
         }
 
@@ -37,7 +31,7 @@ namespace EasyComServer
             }
             else
             {
-                _logger.LogWarning("Client sent unrecognized packet, disconnecting...");
+                //_logger.LogWarning("Client sent unrecognized packet, disconnecting...");
                 return false;
             }
         }

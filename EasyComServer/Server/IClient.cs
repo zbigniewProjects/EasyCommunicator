@@ -19,8 +19,6 @@ namespace EasyComServer
         void EvaluateResponse(ResponseMsg res);
 
         public void HandleStream();
-
-
     }
 
     public enum DisconnectCause 

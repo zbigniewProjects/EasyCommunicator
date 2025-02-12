@@ -1,4 +1,5 @@
 ﻿using DNUploader.Extensions;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 
@@ -24,13 +25,6 @@ namespace EasyComClient
 
             _clientHandler.RegisterMessageHandler<CommandMsg>(ReadCommand);
             _clientHandler.RegisterMessageHandler<ResponseMsg>(Read_ResponseFromServer);
-        }
-
-        void Read_ResponseFromServer(ResponseMsg data)
-        {
-            //check is response is still current, since it can always be received after passing of timeout
-            if (_clientApi.Client._pendingRequests.TryRemove(data.ReqID, out Client.ReceivedResponseCallback value))
-                value.Invoke(new Request { Code = data.Code, ResponseBody = data.Payload});
         }
 
         public int GetExistingPostCmdHash(string cmdName)
@@ -70,15 +64,24 @@ namespace EasyComClient
             _cmdHashes.Add(name, hash);
         }
 
+
+        void Read_ResponseFromServer(ResponseMsg data)
+        {
+            //check is response is still current, since it can always be received after passing of timeout
+            if (_clientApi.Client._pendingRequests.TryRemove(data.ReqID, out Client.ReceivedResponseCallback value))
+                value.Invoke(new Request { Code = data.Code, ResponseBody = data.Payload });
+        }
+
         public void ReadCommand(CommandMsg cmd)
         {
             CommandBaseClient method;
             if (_commands.TryGetValue(cmd.CmdHash, out method))
             {
                 method.Invoke(cmd.Payload, new Response(Respond));
+                _clientApi.Log($"Received command: {cmd.CmdHash}:{cmd.Payload}");
             }
-           // else
-                //_logger.LogWarning($"Received request from server that is not recognized {cmd.CmdHash}");
+            else
+                _clientApi.Log($"Received request from server that is not recognized {cmd.CmdHash} wit payload {cmd.Payload}");
 
             void Respond(byte code, string body)
             {

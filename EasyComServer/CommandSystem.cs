@@ -1,5 +1,5 @@
 ﻿using DNUploader.Extensions;
-using Microsoft.Extensions.Logging;
+//using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 
 namespace EasyComServer
@@ -9,7 +9,7 @@ namespace EasyComServer
     internal class CommandSystem
     {
         //commands that we are asked to execute by client
-        Dictionary<int, CommandBase> _commands = new Dictionary<int, CommandBase>();
+        Dictionary<int, CommandBase> _commands { get; set; } = new Dictionary<int, CommandBase>();
 
         //commands are identified based on integer hashes of their names, instead of names themselves in order to safe bandwidth
         Dictionary<string, int> _cmdHashes = new Dictionary<string, int>();
@@ -40,8 +40,8 @@ namespace EasyComServer
             {
                 method.Invoke(clientID, packet.Payload, new Response(Respond));
             }
-            else
-                _serverInterface.Logger.LogError($"Request received from {clientID} is not recognized, req hash {packet.CmdHash}");
+          //  else
+          //      _serverInterface.Logger.LogError($"Request received from {clientID} is not recognized, req hash {packet.CmdHash}");
 
             void Respond(byte code, string body)
             {
@@ -86,7 +86,7 @@ namespace EasyComServer
                     }
                 }
 
-                _serverInterface.Logger.LogError($"Command \"{name}\" produces the same hash as \"{previousCmdName}\", please rename one of them");
+               // _serverInterface.Logger.LogError($"Command \"{name}\" produces the same hash as \"{previousCmdName}\", please rename one of them");
                 return;
             }
 

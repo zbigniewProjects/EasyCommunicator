@@ -1,7 +1,5 @@
-﻿//using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Threading.Tasks;
-using static EasyComClient.Client;
 
 namespace EasyComClient
 {
@@ -45,15 +43,13 @@ namespace EasyComClient
         short _seatID;
 
         IMessageConverter _messageConverter;
-       // public ILogger Logger;
 
         public Configuration Configuration = new Configuration();
 
-        //must be method, not constructor, since this dll is also used in unity game engine
+        public Action<string> OnLog;
+
         public EasyClientAPI()
         {
-            //Logger = logger;
-
             _messageConverter = new MessageConverter();
             _handler = new ClientHandler(_messageConverter);
             CommandManager = new CommandSystem(this, _handler);
@@ -96,6 +92,12 @@ namespace EasyComClient
         public void SendData<T>(T data) where T : struct
         {
             Client.SendMessage(data);
+        }
+
+        internal void Log(string v)
+        {
+            if(OnLog != null)
+                OnLog.Invoke(v);
         }
     }
 

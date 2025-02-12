@@ -1,12 +1,9 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Globalization;
 using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using static EasyComClient.Client;
-//using Microsoft.Extensions.Logging;
 
 namespace EasyComClient
 {
@@ -41,6 +38,8 @@ namespace EasyComClient
         internal ConcurrentDictionary<ushort, ReceivedResponseCallback> _pendingRequests { get; set; } = new ConcurrentDictionary<ushort, ReceivedResponseCallback>();
         ushort _requestCounter;
 
+        DisconnectCause _disconnectCause;
+
         public Client(EasyClientAPI api, CommandSystem commandSystem, IMessageConverter messageConverter, IClientHandler handler)
         {
             EasyClientAPI = api;
@@ -55,8 +54,6 @@ namespace EasyComClient
             SeatHash = seatHash;
             return await Tcp.Connect(seatHash, serverAddress, port);
         }
-
-        DisconnectCause _disconnectCause;
 
         public void Disconnect(DisconnectCause cause) 
         {
@@ -91,7 +88,6 @@ namespace EasyComClient
 
         public async Task<Request> SendRequestToServer(string name, string data)
         {
-            
             if (EasyClientAPI.Configuration.ThrowException_WhenSendingRequestWhileNotConnected &&
                 ClientStatus != ConnectionStatus.Connected)
                 throw new Exception("Cannot send command when client is not connected to the server");
@@ -161,6 +157,8 @@ namespace EasyComClient
 
         public class TCP
         {
+            Thread _thread;
+
             public TcpClient socket;
             NetworkStream _networkStream;
             private byte[] _receiveBuffer;
@@ -186,6 +184,7 @@ namespace EasyComClient
                 _client = client;
                 _easyClientAPI = easyClientAPI;
             }
+
             public async Task<bool> Connect(short appID, string serverAddress, ushort port)
             {
                 if (_client.ClientStatus == ConnectionStatus.Connecting)
@@ -234,9 +233,12 @@ namespace EasyComClient
 
                         _client.EasyClientAPI.Callback_OnConnected?.Invoke();
                         _client.ClientStatus = ConnectionStatus.Connected;
-                        Task.Run(() => _client.HandleConnection());
+                        
                         //_logger.LogWarning("Connected to the server");
                         _easyClientAPI.Status = EasyComClient.ClientStatus.Connected;
+                        //Task.Run(() => _client.HandleConnection());
+                        _thread = new Thread(new ThreadStart(_client.HandleConnection));
+                        _thread.Start();
                         return true;
                     }
                     else
@@ -281,6 +283,10 @@ namespace EasyComClient
                     }
                     catch (IOException ex) when (ex.InnerException is SocketException socketEx)
                     {
+                        if (socketEx.SocketErrorCode == SocketError.WouldBlock)
+                        {
+                            return;
+                        }
                         if (socketEx.SocketErrorCode == SocketError.TimedOut)
                         {
                             // Handle write timeout exception
@@ -288,12 +294,14 @@ namespace EasyComClient
                         }
                         else if (socketEx.SocketErrorCode == SocketError.ConnectionReset)
                         {
+                            _easyClientAPI.Log($"SOCKET ERROR:{socketEx.SocketErrorCode}:{socketEx.Message}");
                             // Handle remote host closure
                             _client.Disconnect(DisconnectCause.ServerDisconnected);
                             return;
                         }
                         else
                         {
+                            _easyClientAPI.Log($"SOCKET ERROR:{socketEx.SocketErrorCode}:{socketEx.Message}");
                             // Handle other socket errors
                             _client.Disconnect(DisconnectCause.ServerDisconnected);
                             return;
@@ -302,6 +310,7 @@ namespace EasyComClient
 
                     if (streamLength < 0)
                     {
+                        _easyClientAPI.Log($"Stream length {streamLength}");
                         _client.Disconnect(DisconnectCause.ServerDisconnected);
                         return;
                     }
