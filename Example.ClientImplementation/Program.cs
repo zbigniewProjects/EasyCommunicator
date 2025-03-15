@@ -29,8 +29,8 @@ public class Program
         async Task CreateAndClient()
         {
             EasyClientAPI client = new EasyClientAPI();
-            client.Configuration.ThrowException_WhenSendingDataWhileNotConnected = false;
-            client.Configuration.ThrowException_WhenSendingRequestWhileNotConnected = false;
+            client.UserConfiguration.ThrowException_WhenSendingDataWhileNotConnected = false;
+            client.UserConfiguration.ThrowException_WhenSendingRequestWhileNotConnected = false;
 
             Console.WriteLine($"Client connecting to {port}...");
             client.Callback_OnDisconnected += onDis;
@@ -46,20 +46,20 @@ public class Program
             if (client.Status != ClientStatus.Connected)
                 return;
 
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 100; i++)
             {
                 if (client.Status != ClientStatus.Connected)
                     break;
 
-                Random random = new Random();
-                Request req = await client.SendRequest("testreq", "body");
-                if (req.Code == 0)
-                    Console.WriteLine($"Received response from server {req.ResponseBody}");
-                await client.SendRequest("testreq", random.Next(0, 1000).ToString());
-                if (req.Code == 0)
-                    Console.WriteLine($"Received response from server {req.ResponseBody}");
+                //Random random = new Random();
+                /*Request req = await*/ client.SendRequest("testreq", $"request from client number {i}");
+                //if (req.Code == 0)
+                    //Console.WriteLine($"Received response from server {req.ResponseBody}");
+
+                 //client.SendRequest("testreq", random.Next(0, 1000).ToString());
+                Console.WriteLine($"Sent req {i}");
             }
-            await Task.Delay(6000);
+            await Task.Delay(3000);
             client.Disconnect();
         }
     }

@@ -16,7 +16,7 @@ public class Program
         EasyServerAPI server = new EasyServerAPI();
         server.Configuration.ThrowException_WhenSendingDataWhileNotConnected = false;
         server.Configuration.ThrowException_WhenSendingRequestWhileNotConnected = false;
-        server.StartServer(port, 20);
+        server.StartServer(port, 3);
         server.SetUseSeatSystem(false);
 
         Console.WriteLine($"Easy server started on port {port}");
