@@ -16,7 +16,7 @@ namespace EasyComClient
     }
     internal class Client
     {
-        public enum ConnectionStatus 
+        enum ConnectionStatus
         {
             NotConnected,
             Connecting,
@@ -24,7 +24,7 @@ namespace EasyComClient
             Disconnecting,
         }
 
-        public ConnectionStatus ClientStatus = ConnectionStatus.NotConnected;
+        ConnectionStatus ClientStatus { get; set; } = ConnectionStatus.NotConnected;
 
         public TCP Tcp;
         public short SeatHash;
@@ -64,7 +64,8 @@ namespace EasyComClient
 
         public void HandleConnection()
         {
-            if (ClientStatus == ConnectionStatus.NotConnected) return;
+            if (ClientStatus == ConnectionStatus.NotConnected) 
+                return;
 
             if (ClientStatus == ConnectionStatus.Disconnecting)
             {
@@ -96,13 +97,11 @@ namespace EasyComClient
 
             if (_pendingRequests.Count >= ushort.MaxValue)
             {
-                //EasyClientAPI.Logger.LogWarning($"Max amaount of awaiting requests reached ({ushort.MaxValue})");
+                //is user somehow accumulate over 65k requests, just make later requests timeout
                 return res;
             }
 
-            ushort reqID;
-
-            reqID = _requestCounter;
+            ushort reqID = _requestCounter;
             SemaphoreSlim semaphoreSlim = new SemaphoreSlim(0);
 
             _pendingRequests.TryAdd(reqID, ReceivedResponseCallback);
@@ -120,7 +119,6 @@ namespace EasyComClient
             });
 
             await semaphoreSlim.WaitAsync(TimeSpan.FromMilliseconds(EasyClientAPI.Configuration.RequestTimeout));
-
             _pendingRequests.TryRemove(reqID, out ReceivedResponseCallback value);
 
             return res;
@@ -144,8 +142,6 @@ namespace EasyComClient
 
         public class TCP
         {
-            Thread _thread;
-
             public TcpClient socket;
             NetworkStream _networkStream;
             private byte[] _receiveBuffer;
@@ -174,6 +170,8 @@ namespace EasyComClient
 
             public async Task<bool> Connect(short appID, string serverAddress, ushort port)
             {
+                _easyClientAPI.Status = EasyComClient.ClientStatus.EstablishingConnection;
+
                 if (_client.ClientStatus == ConnectionStatus.Connecting)
                     return false;
 
@@ -196,6 +194,7 @@ namespace EasyComClient
 
                 using (var timeoutCancellationTokenSource = new CancellationTokenSource())
                 {
+                    //either wait for establishing connection to complete, or wait timeout time set in config
                     await Task.WhenAny(
                         socket.ConnectAsync(serverAddress, port),
                         Task.Delay(_easyClientAPI.Configuration.ConnectionTimeout,
@@ -220,7 +219,9 @@ namespace EasyComClient
 
                         _client.EasyClientAPI.Callback_OnConnected?.Invoke();
                         _client.ClientStatus = ConnectionStatus.Connected;
-                        _easyClientAPI.StartConnection();
+
+                        //this will start loop that will read and write data from/to network stream
+                        _easyClientAPI.StartConnection(); 
                         return true;
                     }
                     else

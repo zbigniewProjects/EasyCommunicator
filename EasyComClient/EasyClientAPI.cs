@@ -3,6 +3,13 @@ using System.Threading.Tasks;
 
 namespace EasyComClient
 {
+    public enum ClientStatus
+    {
+        NotConnected,
+        EstablishingConnection,
+        Connected,
+    }
+
     public struct Request
     {
         public byte Code;
@@ -19,11 +26,6 @@ namespace EasyComClient
 
     public delegate void CommandBaseClient(string argsm, Response res);
     public delegate void ClientResponseBase(byte statusCode, string body);
-
-    public enum ClientStatus {
-        NotConnected,
-        Connected,
-    }
 
     public class EasyClientAPI
     {
@@ -130,14 +132,6 @@ namespace EasyComClient
                 }
             });
         }
-
-        //public void HandleConnection() 
-        //{
-        //    if (Status != ClientStatus.Connected) 
-        //        return;
-
-        //    Client.HandleConnection();
-        //}
     }
 
     public struct Configuration
