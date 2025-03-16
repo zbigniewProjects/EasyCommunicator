@@ -220,10 +220,7 @@ namespace EasyComClient
 
                         _client.EasyClientAPI.Callback_OnConnected?.Invoke();
                         _client.ClientStatus = ConnectionStatus.Connected;
-                        
                         _easyClientAPI.StartConnection();
-                        //_thread = new Thread(new ThreadStart(_client.HandleConnection));
-                        //_thread.Start();
                         return true;
                     }
                     else

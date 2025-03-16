@@ -131,11 +131,13 @@ namespace EasyComClient
             });
         }
 
-        public void HandleConnection() 
-        {
-            if (Status != ClientStatus.Connected) return;
-            Client.HandleConnection();
-        }
+        //public void HandleConnection() 
+        //{
+        //    if (Status != ClientStatus.Connected) 
+        //        return;
+
+        //    Client.HandleConnection();
+        //}
     }
 
     public struct Configuration

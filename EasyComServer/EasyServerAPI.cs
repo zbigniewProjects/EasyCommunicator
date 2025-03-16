@@ -69,11 +69,9 @@ namespace EasyComServer
         [Obsolete]
         public void RegisterLogHandler(Action<string> logHandler) => throw new NotSupportedException();
 
-        public void StartServer(ushort port, ushort maxConcurrentConnections)
+        public bool StartServer(ushort port, ushort maxConcurrentConnections)
         {
-            Task.Run(()=>
-                _server.Start(port, maxConcurrentConnections, _handler, _commandSystem, _messageConverter)
-            );
+            return _server.Start(port, maxConcurrentConnections, _handler, _commandSystem, _messageConverter);
         }
         public void StopServer()
         {

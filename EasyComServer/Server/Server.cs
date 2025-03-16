@@ -28,6 +28,7 @@ namespace EasyComServer
 
         ServerState _currentServerState;
         private Task _handleClientsTask;
+        private Task _handleListenerTask;
 
         enum ServerState 
         {
@@ -42,7 +43,7 @@ namespace EasyComServer
             _dnComInterface = dNCommunicatorAPI;
         }
 
-        public async void Start(ushort port, ushort maxConnections, IServerHandler handler, CommandSystem cmdManager, IMessageConverter messageConverter)
+        public bool Start(ushort port, ushort maxConnections, IServerHandler handler, CommandSystem cmdManager, IMessageConverter messageConverter)
         {
             ushort maxLimit = 32000;
             if (maxConnections > maxLimit) 
@@ -65,19 +66,19 @@ namespace EasyComServer
             if (_currentServerState == ServerState.Starting) 
             {
                 //_dnComInterface.Logger.LogWarning($"Server on port {port} is already starting...");
-                return;
+                return false;
             }
 
             if (_currentServerState == ServerState.Closing) 
             {
                 //_dnComInterface.Logger.LogWarning($"Server on port {port} is closing, cant start it now");
-                return;
+                return false;
             }
 
             if (_currentServerState == ServerState.Listening) 
             {
                 //_dnComInterface.Logger.LogWarning($"Server on port {port} is already running. Do not start same server instance twice.");
-                return;
+                return false;
             }
             _currentServerState = ServerState.Starting;
 
@@ -95,14 +96,19 @@ namespace EasyComServer
             catch 
             {
                 _currentServerState = ServerState.Off;
-                return;
+                return false;
             }
             
             _currentServerState = ServerState.Listening;
             _handleClientsTask = Task.Run(HandleClients);
+            _handleListenerTask = Task.Run(HandleListener);
             _tcpListener = tcpListener;
             _serverCancellationToken = new CancellationTokenSource();
+            return true;
+        }
 
+        async Task HandleListener() 
+        {
             while (_currentServerState == ServerState.Listening || _currentServerState == ServerState.Closing)
             {
                 try
