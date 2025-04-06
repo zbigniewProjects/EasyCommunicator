@@ -4,7 +4,6 @@ using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-
 namespace EasyComClient
 {
     public enum DisconnectCause
@@ -326,7 +325,7 @@ namespace EasyComClient
                             _currentMessageLength = 0;
                         }
                         else
-                            break; //every message in stream read
+                            break; //every message in stream read, so break loop
                     }
                 }
             }
