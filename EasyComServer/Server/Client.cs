@@ -10,7 +10,6 @@ namespace EasyComServer
     internal class Client : IClient
     {
         Server _server;
-
         public ConnectionStatus ClientStatus { get; set; } = ConnectionStatus.NotConnected;
         public short ID() => _id;
 
@@ -26,7 +25,6 @@ namespace EasyComServer
 
         EasyServerAPI _easyServerApi;
         IMessageConverter _messageConverter;
-        private object _reqCounterLock = new ();
         DisconnectCause _disconnectCause;
 
         public Client(EasyServerAPI dNCommunicatorAPI, IServerHandler handler, IMessageConverter messageConverter)
@@ -70,9 +68,8 @@ namespace EasyComServer
                 _server.OnDisconnectClient(_id, _disconnectCause);
                 ClientStatus = ConnectionStatus.NotConnected;
                 return;
-            }
-
-            if (ClientStatus == ConnectionStatus.Connected)
+            } 
+            else if (ClientStatus == ConnectionStatus.Connected)
             {
                 _tcp.HandleStreamRead();
                 _tcp.HandleStreamWrite();
@@ -93,7 +90,7 @@ namespace EasyComServer
         }
         #region request system
 
-        //TODO: redo
+        //TODO: redo2
         public async Task<Request> SendRequest(string name, string data)
         {
             if (_easyServerApi.Configuration.ThrowException_WhenSendingRequestWhileNotConnected &&
@@ -102,23 +99,22 @@ namespace EasyComServer
 
             Request res = new Request();
             res.Code = byte.MaxValue; //code 255 means request timeout. This wont be overriden if we don't receive response, so timeout
-            
+
             //if request was made when client is not connected return timeout response
             if (ClientStatus != ConnectionStatus.Connected) return res;
 
-            object _requestlock = new object();
-
             ushort reqID;
-            lock (_reqCounterLock)
-            {
-                reqID = _requestCounter;
 
-                _pendingRequests.TryAdd(reqID, ReceivedResponseCallback);
+            SemaphoreSlim semaphoreSlim = new SemaphoreSlim(0);
 
-                _requestCounter++;
-                if (_requestCounter == ushort.MaxValue)
-                    _requestCounter = 0;
-            }
+            reqID = _requestCounter;
+
+            _pendingRequests.TryAdd(reqID, ReceivedResponseCallback);
+
+            _requestCounter++;
+            if (_requestCounter == ushort.MaxValue)
+                _requestCounter = 0;
+
             //send message to client
             SendMessage(new CommandMsg
             {
@@ -127,27 +123,17 @@ namespace EasyComServer
                 ReqID = reqID
             });
 
-            //wait for respose from client or timeout request if no response will be received
-            return await Task.Run(() =>
-            {
-                lock (_requestlock)
-                {
-                    Monitor.Wait(_requestlock, _easyServerApi.Configuration.RequestTimeout);
-                }
+            await semaphoreSlim.WaitAsync(TimeSpan.FromMilliseconds(_easyServerApi.Configuration.RequestTimeout));
 
-                _pendingRequests.TryRemove(reqID, out ReceivedResponseCallback value);
+            _pendingRequests.TryRemove(reqID, out ReceivedResponseCallback value);
 
-                return res;
-            });
+            return res;
 
             void ReceivedResponseCallback(Request _res)
             {
                 res = _res;
-
-                lock (_requestlock)
-                {
-                    Monitor.Pulse(_requestlock);
-                }
+                semaphoreSlim.Release();
+                semaphoreSlim.Dispose();
             }
         }
         public async Task<Request> SendStructuredRequest<T>(string name, T msg) where T : struct
@@ -295,7 +281,7 @@ namespace EasyComServer
                         }
                     }
 
-                    if (streamLength < 0)
+                    if (streamLength <= 0)
                     {
                         _client.Disconnect(DisconnectCause.ClientDisconnected);
                         return;

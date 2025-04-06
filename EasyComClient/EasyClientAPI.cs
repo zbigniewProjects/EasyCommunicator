@@ -3,6 +3,13 @@ using System.Threading.Tasks;
 
 namespace EasyComClient
 {
+    public enum ClientStatus
+    {
+        NotConnected,
+        EstablishingConnection,
+        Connected,
+    }
+
     public struct Request
     {
         public byte Code;
@@ -20,11 +27,6 @@ namespace EasyComClient
     public delegate void CommandBaseClient(string argsm, Response res);
     public delegate void ClientResponseBase(byte statusCode, string body);
 
-    public enum ClientStatus {
-        NotConnected,
-        Connected,
-    }
-
     public class EasyClientAPI
     {
         public ClientStatus Status { get; internal set; } = ClientStatus.NotConnected;
@@ -34,8 +36,8 @@ namespace EasyComClient
 
         public delegate void OnConnectedToServer();
         public delegate void OnDisconnectedFromServer(DisconnectCause disconnectCause);
-        public OnConnectedToServer Callback_OnConnected;
-        public OnDisconnectedFromServer Callback_OnDisconnected;
+        public OnConnectedToServer Callback_OnConnected { get; set; }
+        public OnDisconnectedFromServer Callback_OnDisconnected { get; set; }
         public OnConnectedToServer Callback_CouldNotConnect;
 
         internal CommandSystem CommandManager { private set; get; }
@@ -44,9 +46,12 @@ namespace EasyComClient
 
         IMessageConverter _messageConverter;
 
-        public Configuration Configuration = new Configuration();
+        internal Configuration Configuration;
+        public Configuration UserConfiguration;
 
         public Action<string> OnLog;
+
+        Task _connectionHandlerTask;
 
         public EasyClientAPI()
         {
@@ -54,17 +59,32 @@ namespace EasyComClient
             _handler = new ClientHandler(_messageConverter);
             CommandManager = new CommandSystem(this, _handler);
             Client = new Client(this, CommandManager, _messageConverter, _handler);
+
+            UserConfiguration = new Configuration
+            {
+                ThrowException_WhenSendingRequestWhileNotConnected = false,
+                ThrowException_WhenSendingDataWhileNotConnected = true,
+                RequestTimeout = 10000,
+                ConnectionTimeout = 5000,
+                CustomUpdateLoopInvoke = false,
+            };
         }
 
         public void AssignSeatID(short seatID) => _seatID = seatID;
 
-        public async Task<bool> Connect(string address, ushort port) => 
-            await Client.ConnectToServer(_seatID, address, port);
+        public async Task<bool> Connect(string address, ushort port)
+        {
+            Configuration = UserConfiguration; //prevents changes made during established connection to be applied
+            return await Client.ConnectToServer(_seatID, address, port);
+        }
         
 
         public void Disconnect()
         {
             Client.Disconnect(DisconnectCause.Disconnected);
+
+            if(_connectionHandlerTask != null && _connectionHandlerTask.IsCompleted)
+                _connectionHandlerTask.Dispose();
         }
 
         public delegate void MessageHandler<T>(T structData);
@@ -79,11 +99,6 @@ namespace EasyComClient
             CommandManager.RegisterCommand(name, method);
         }
 
-        /*public async Task<Request> SendStructuredRequest<T>(string name, T msg) where T : struct
-        {
-            string serializedMsg = JsonConvert.SerializeObject(msg);
-            return await Client.SendRequestToServer(name, serializedMsg);
-        }*/
         public async Task<Request> SendRequest(string name, string body) =>
             await Client.SendRequestToServer(name, body);
         public async Task<Request> SendRequest(string name) =>
@@ -99,28 +114,49 @@ namespace EasyComClient
             if(OnLog != null)
                 OnLog.Invoke(v);
         }
+
+        internal void StartConnection()
+        {
+            Status = ClientStatus.Connected;
+
+            if (Configuration.CustomUpdateLoopInvoke == true) return;
+
+            if (_connectionHandlerTask != null)
+                _connectionHandlerTask.Dispose();
+
+            _connectionHandlerTask = Task.Run(() => {
+                while (Status == ClientStatus.Connected)
+                {
+                    Client.HandleConnection();
+                    Task.Delay(20);
+                }
+            });
+        }
     }
 
-    public class Configuration
+    public struct Configuration
     {
         /// <summary>
         /// Determines if EasyCommunicator should throw exception when trying to send REQUESTS while client is not connected to the server
         /// </summary>
-        public bool ThrowException_WhenSendingRequestWhileNotConnected { get; set; } = true;
+        public bool ThrowException_WhenSendingRequestWhileNotConnected { get; set; }
 
         /// <summary>
         /// Determines if EasyCommunicator should throw exception when trying to send DATA while client is not connected to the server
         /// </summary>
-        public bool ThrowException_WhenSendingDataWhileNotConnected { get; set; } = true;
+        public bool ThrowException_WhenSendingDataWhileNotConnected { get; set; } 
 
         /// <summary>
         /// How much time (miliseconds) must pass to stop waiting for server's response to out request 
         /// </summary>
-        public int RequestTimeout { get; set; } = 10000;
+        public int RequestTimeout { get; set; }
 
         /// <summary>
         /// Timeout (in miliseconds) for establishing connection with server
         /// </summary>
-        public int ConnectionTimeout { get; set; } = 5000;
+        public int ConnectionTimeout { get; set; }
+
+        public bool CustomUpdateLoopInvoke { get; set; }
+
     }
 }

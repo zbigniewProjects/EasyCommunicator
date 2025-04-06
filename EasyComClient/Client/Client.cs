@@ -4,7 +4,6 @@ using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-
 namespace EasyComClient
 {
     public enum DisconnectCause
@@ -16,7 +15,7 @@ namespace EasyComClient
     }
     internal class Client
     {
-        public enum ConnectionStatus 
+        enum ConnectionStatus
         {
             NotConnected,
             Connecting,
@@ -24,7 +23,7 @@ namespace EasyComClient
             Disconnecting,
         }
 
-        public ConnectionStatus ClientStatus = ConnectionStatus.NotConnected;
+        ConnectionStatus ClientStatus { get; set; } = ConnectionStatus.NotConnected;
 
         public TCP Tcp;
         public short SeatHash;
@@ -62,28 +61,26 @@ namespace EasyComClient
             ClientStatus = ConnectionStatus.Disconnecting;
         }
 
-        public void HandleConnection() 
+        public void HandleConnection()
         {
-            while (true)
-            {
-                if (ClientStatus == ConnectionStatus.Disconnecting)
-                {
-                    //timeout all pending request before disconnecting
-                    //EasyClientAPI.Logger.LogWarning($"Relasing all pending requests: {_pendingRequests.Count}");
-                    foreach (ReceivedResponseCallback item in _pendingRequests.Values)
-                    {
-                        item.Invoke(new Request { Code = 254 });
-                    }
+            if (ClientStatus == ConnectionStatus.NotConnected) 
+                return;
 
-                    Tcp.Disconnect(_disconnectCause);
-                    EasyClientAPI.Status = EasyComClient.ClientStatus.NotConnected;
-                    return;
+            if (ClientStatus == ConnectionStatus.Disconnecting)
+            {
+                //timeout all pending request before disconnecting
+                foreach (ReceivedResponseCallback item in _pendingRequests.Values)
+                {
+                    item.Invoke(new Request { Code = 254 });
                 }
-                
-                Tcp.HandleConnectionRead();
-                Tcp.HandleConnectionWrite();
-                Task.Delay(50);
+
+                Tcp.Disconnect(_disconnectCause);
+                EasyClientAPI.Status = EasyComClient.ClientStatus.NotConnected;
+                return;
             }
+
+            Tcp.HandleConnectionRead();
+            Tcp.HandleConnectionWrite();
         }
 
         public async Task<Request> SendRequestToServer(string name, string data)
@@ -99,27 +96,19 @@ namespace EasyComClient
 
             if (_pendingRequests.Count >= ushort.MaxValue)
             {
-                //EasyClientAPI.Logger.LogWarning($"Max amaount of awaiting requests reached ({ushort.MaxValue})");
+                //is user somehow accumulate over 65k requests, just make later requests timeout
                 return res;
             }
 
-            object locker = new object();
-            ushort reqID;
+            ushort reqID = _requestCounter;
+            SemaphoreSlim semaphoreSlim = new SemaphoreSlim(0);
 
-            ManualResetEventSlim callbackEvent = new ManualResetEventSlim();
+            _pendingRequests.TryAdd(reqID, ReceivedResponseCallback);
 
-            lock (_pendingRequests)
-            {
-                reqID = _requestCounter;
+            _requestCounter++;
+            if (_requestCounter == ushort.MaxValue)
+                _requestCounter = 0;
 
-                _pendingRequests.TryAdd(reqID, ReceivedResponseCallback);
-
-                _requestCounter++;
-                if (_requestCounter == ushort.MaxValue)
-                    _requestCounter = 0;
-
-               // EasyClientAPI.Logger.LogWarning($"Registering requests {_pendingRequests.Count}");
-            }
             //send message to client
             SendMessage(new CommandMsg
             {
@@ -128,21 +117,16 @@ namespace EasyComClient
                 ReqID = reqID
             });
 
-            await Task.Run(() =>
-            {
-                callbackEvent.Wait(EasyClientAPI.Configuration.RequestTimeout);
-                callbackEvent.Dispose();
-            });
+            await semaphoreSlim.WaitAsync(TimeSpan.FromMilliseconds(EasyClientAPI.Configuration.RequestTimeout));
+            _pendingRequests.TryRemove(reqID, out ReceivedResponseCallback value);
 
-            lock (_pendingRequests){
-                _pendingRequests.TryRemove(reqID, out ReceivedResponseCallback value);
-            }
             return res;
 
             void ReceivedResponseCallback(Request _res)
             {
                 res = _res;
-                callbackEvent.Set();
+                semaphoreSlim.Release();
+                semaphoreSlim.Dispose();
             }
         }
 
@@ -157,8 +141,6 @@ namespace EasyComClient
 
         public class TCP
         {
-            Thread _thread;
-
             public TcpClient socket;
             NetworkStream _networkStream;
             private byte[] _receiveBuffer;
@@ -187,6 +169,8 @@ namespace EasyComClient
 
             public async Task<bool> Connect(short appID, string serverAddress, ushort port)
             {
+                _easyClientAPI.Status = EasyComClient.ClientStatus.EstablishingConnection;
+
                 if (_client.ClientStatus == ConnectionStatus.Connecting)
                     return false;
 
@@ -209,6 +193,7 @@ namespace EasyComClient
 
                 using (var timeoutCancellationTokenSource = new CancellationTokenSource())
                 {
+                    //either wait for establishing connection to complete, or wait timeout time set in config
                     await Task.WhenAny(
                         socket.ConnectAsync(serverAddress, port),
                         Task.Delay(_easyClientAPI.Configuration.ConnectionTimeout,
@@ -233,12 +218,9 @@ namespace EasyComClient
 
                         _client.EasyClientAPI.Callback_OnConnected?.Invoke();
                         _client.ClientStatus = ConnectionStatus.Connected;
-                        
-                        //_logger.LogWarning("Connected to the server");
-                        _easyClientAPI.Status = EasyComClient.ClientStatus.Connected;
-                        //Task.Run(() => _client.HandleConnection());
-                        _thread = new Thread(new ThreadStart(_client.HandleConnection));
-                        _thread.Start();
+
+                        //this will start loop that will read and write data from/to network stream
+                        _easyClientAPI.StartConnection(); 
                         return true;
                     }
                     else
@@ -308,7 +290,7 @@ namespace EasyComClient
                         }
                     }
 
-                    if (streamLength < 0)
+                    if (streamLength <= 0)
                     {
                         _easyClientAPI.Log($"Stream length {streamLength}");
                         _client.Disconnect(DisconnectCause.ServerDisconnected);
@@ -343,7 +325,7 @@ namespace EasyComClient
                             _currentMessageLength = 0;
                         }
                         else
-                            break; //every message in stream read
+                            break; //every message in stream read, so break loop
                     }
                 }
             }
